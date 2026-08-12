@@ -88,8 +88,15 @@ python3 agent.py --live
 
 - 오늘의 작업: 사진 업로드, 메모, 톤앤매너, 편집 가능한 초안
 - 포스트 라이브러리: 초안·검토·게시 상태
-- 수익화: Brand Connect, Shopping Connect, Coupang, AdSense, Toss 확장 슬롯
+- 수익화 채널 선택: Brand Connect, Shopping Connect, Coupang, AdSense, Toss를 초안별 메타데이터로 선택
+- 제휴 링크 넣기: 사용자가 제공한 `http(s)` 원문 링크를 본문에 삽입하고 고지문을 중복 없이 추가
 - 규정 점검: 경제적 이해관계 표기, 개인정보, 저작권, 과장 표현 확인
+
+### 수익화 연결의 현재 범위
+
+수익화 화면의 채널 선택은 외부 계정 OAuth 연결이 아닙니다. 선택한 채널 ID는 초안과 함께 저장되며, 제휴 링크 입력은 실제 본문에 링크와 고지문을 삽입합니다. 예상 수익·클릭·구매 리포트, 네이버 Brand Connect/Shopping Connect 캠페인 조회, 쿠팡 API, AdSense OAuth, Toss 파트너십은 각 사업자의 승인된 계정·자격 증명·공식 연동을 별도로 설정해야 합니다. 연결되지 않은 계정을 `연결됨`으로 표시하지 않으며, 현재 화면에서는 `초안에 선택됨`으로만 표시합니다.
+
+현재 네이버 자동 대량 발행이나 외부 채널 자동 로그인은 지원하지 않습니다. 계정 약관·2단계 인증·정책을 우회하지 않고, 초안을 검토한 뒤 사용자가 직접 게시하는 흐름입니다.
 
 시장·정책 근거와 영상 흐름은 [`docs/video-analysis.md`](docs/video-analysis.md), [`docs/monetization-research.md`](docs/monetization-research.md), [`docs/agent-architecture.md`](docs/agent-architecture.md)에 정리했습니다.
 

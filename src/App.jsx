@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { attachAffiliateLink } from './monetization.js'
 
 const API_BASE = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://127.0.0.1:8000' : ''
 
@@ -50,6 +51,13 @@ const integrations = [
   { id: 'coupang', label: '쿠팡 파트너스', short: 'c', color: 'coupang', detail: '추천 링크·커미션' },
   { id: 'adsense', label: 'Google AdSense', short: '◆', color: 'adsense', detail: '소유 사이트 광고' },
   { id: 'toss', label: 'Toss 파트너십', short: '↗', color: 'toss', detail: '결제·미니앱 확장' },
+]
+
+const affiliateChannels = [
+  { value: 'shopping', label: '네이버 쇼핑 커넥트', integrationId: 'shopping' },
+  { value: 'coupang', label: '쿠팡 파트너스', integrationId: 'coupang' },
+  { value: 'brand', label: '네이버 브랜드커넥트', integrationId: 'brand' },
+  { value: 'direct', label: '직접 협찬', integrationId: null },
 ]
 
 const policyChecks = [
@@ -109,6 +117,8 @@ function App() {
   const [providerHealth, setProviderHealth] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [affiliateUrl, setAffiliateUrl] = useState('')
+  const [affiliateChannel, setAffiliateChannel] = useState('shopping')
   const [activePostId, setActivePostId] = useState(null)
   const [libraryPosts, setLibraryPosts] = useState([])
   const [storageReady, setStorageReady] = useState(false)
@@ -134,6 +144,8 @@ function App() {
     setTone(post.tone || '친근하고 정보적인')
     setImages(Array.isArray(post.photos) ? post.photos : [])
     setDisclosure(Boolean(post.disclosure))
+    setAffiliateUrl('')
+    setAffiliateChannel('shopping')
     setProviderMode(post.provider === 'openai' ? 'openai' : 'local')
     setLastGeneration({ provider: post.provider, model: post.model, facts_to_verify: post.facts_to_verify || [], preflight: post.preflight || {} })
     setIntegrationsState({ ...initialIntegrations, ...Object.fromEntries((post.monetization || []).map((id) => [id, true])) })
@@ -255,6 +267,8 @@ function App() {
     setTone('친근하고 정보적인')
     setImages([])
     setDisclosure(true)
+    setAffiliateUrl('')
+    setAffiliateChannel('shopping')
     setProviderMode('local')
     setLastGeneration(null)
     setIntegrationsState(initialIntegrations)
@@ -269,11 +283,26 @@ function App() {
   const toggleIntegration = (id) => {
     setIntegrationsState((state) => ({ ...state, [id]: !state[id] }))
     const item = integrations.find((integration) => integration.id === id)
-    notify(`${item?.label || '연결'} 설정을 업데이트했어요.`)
+    notify(`${item?.label || '채널'}을 이 초안에 ${integrationsState[id] ? '선택 해제' : '선택'}했어요.`)
+  }
+
+  const attachLinkToDraft = () => {
+    const channel = affiliateChannels.find((item) => item.value === affiliateChannel) || affiliateChannels[0]
+    const result = attachAffiliateLink(body, affiliateUrl, channel.label, disclosureText)
+    if (!result.ok) {
+      notify(result.code === 'duplicate_url' ? '이미 본문에 같은 링크가 있어요.' : 'http 또는 https로 시작하는 링크를 입력하세요.')
+      return
+    }
+    setBody(result.body)
+    setDisclosure(true)
+    if (channel.integrationId) setIntegrationsState((state) => ({ ...state, [channel.integrationId]: true }))
+    setAffiliateUrl('')
+    notify('링크와 고지문을 본문에 삽입했습니다. 저장 버튼으로 확정하세요.')
   }
 
   const copyDraft = async () => {
-    const text = `${postTitle}\n\n${body}${disclosure ? `\n\n${disclosureText}` : ''}`
+    const disclosureSuffix = disclosure && !body.includes(disclosureText) ? `\n\n${disclosureText}` : ''
+    const text = `${postTitle}\n\n${body}${disclosureSuffix}`
     try {
       await navigator.clipboard.writeText(text)
       notify('초안을 클립보드에 복사했어요. 네이버 블로그에서 검토 후 붙여넣으세요.')
@@ -341,7 +370,7 @@ function App() {
         ) : null}
 
         {activeView === 'library' ? <LibraryView posts={libraryPosts} onOpenPost={openPost} onNewPost={startNewPost} /> : null}
-        {activeView === 'monetization' ? <MonetizationView integrationsState={integrationsState} toggleIntegration={toggleIntegration} notify={notify} /> : null}
+        {activeView === 'monetization' ? <MonetizationView integrationsState={integrationsState} toggleIntegration={toggleIntegration} notify={notify} affiliateUrl={affiliateUrl} setAffiliateUrl={setAffiliateUrl} affiliateChannel={affiliateChannel} setAffiliateChannel={setAffiliateChannel} onAttachLink={attachLinkToDraft} /> : null}
         {activeView === 'policy' ? <PolicyView disclosure={disclosure} setDisclosure={setDisclosure} notify={notify} /> : null}
       </main>
 
@@ -475,7 +504,7 @@ function DraftTools({ onTool }) {
 }
 
 function IntegrationPanel({ integrationsState, toggleIntegration, setActiveView }) {
-  return <section className="card integration-card"><div className="panel-heading"><div><h3>수익화 연결 상태</h3><p>초안에 맞는 채널을 선택하세요.</p></div><button className="icon-button compact" onClick={() => setActiveView('monetization')} aria-label="수익화 페이지"><Icon name="arrow" size={16} /></button></div><div className="integration-list">{integrations.map((item) => <button className="integration-row" key={item.id} onClick={() => toggleIntegration(item.id)}><span className={`integration-logo ${item.color}`}>{item.short}</span><span className="integration-copy"><strong>{item.label}</strong><small>{item.detail}</small></span><span className={`integration-status ${integrationsState[item.id] ? 'connected' : ''}`}>{integrationsState[item.id] ? '연결됨' : item.id === 'adsense' ? '준비 중' : '설정 필요'}<StatusDot tone={integrationsState[item.id] ? 'good' : 'muted'} /></span></button>)}</div><button className="settings-link" onClick={() => setActiveView('monetization')}>수익화 설정 관리 <Icon name="arrow" size={15} /></button></section>
+  return <section className="card integration-card"><div className="panel-heading"><div><h3>수익화 채널 선택</h3><p>계정 연결이 아니라 이 초안에 사용할 채널을 고릅니다.</p></div><button className="icon-button compact" onClick={() => setActiveView('monetization')} aria-label="수익화 페이지"><Icon name="arrow" size={16} /></button></div><div className="integration-list">{integrations.map((item) => <button className="integration-row" key={item.id} onClick={() => toggleIntegration(item.id)}><span className={`integration-logo ${item.color}`}>{item.short}</span><span className="integration-copy"><strong>{item.label}</strong><small>{item.detail}</small></span><span className={`integration-status ${integrationsState[item.id] ? 'connected' : ''}`}>{integrationsState[item.id] ? '초안에 선택됨' : item.id === 'adsense' ? '사이트 필요' : '선택 안 함'}<StatusDot tone={integrationsState[item.id] ? 'good' : 'muted'} /></span></button>)}</div><button className="settings-link" onClick={() => setActiveView('monetization')}>수익화 설정 보기 <Icon name="arrow" size={15} /></button></section>
 }
 
 function ComplianceCard({ setActiveView }) {
@@ -495,16 +524,17 @@ function LibraryView({ posts, onOpenPost, onNewPost }) {
   return <div className="subpage"><div className="subpage-heading"><div><span className="intro-kicker"><Icon name="file" size={14} /> LIBRARY</span><h2>포스트 라이브러리</h2><p>작성한 초안과 게시 준비 상태를 한눈에 관리하세요.</p></div><button className="primary-button" onClick={onNewPost}>새 포스트 만들기 <Icon name="arrow" size={16} /></button></div><div className="toolbar-row"><div className="search-field"><Icon name="search" size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="제목, 메모, 태그 검색" /></div><div className="filter-pills"><button className="filter-pill active">전체 {posts.length}</button><button className="filter-pill">검토 대기 {posts.filter((post) => post.status !== 'published').length}</button><button className="filter-pill">게시 완료 {posts.filter((post) => post.status === 'published').length}</button></div></div><div className="library-table">{filteredPosts.length ? filteredPosts.map((post) => <div className="library-row" key={post.id}><span className={`library-thumb ${statusTone(post.status)}`} /><div className="library-title"><strong>{post.title || '제목 없는 초안'}</strong><span>{post.photos?.length || 0}장 · 마지막 저장 {new Date(post.updated_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div><span className="library-status"><StatusDot tone={statusTone(post.status)} />{statusLabel(post.status)}</span><button className="icon-button compact" aria-label={`${post.title || '초안'} 열기`} onClick={() => onOpenPost(post)}><Icon name="arrow" size={16} /></button></div>) : <div className="library-empty">아직 저장된 포스트가 없습니다. 새 포스트를 만들고 저장해 보세요.</div>}</div><div className="pagination"><span>{filteredPosts.length}개 표시 · 자동 저장 아님, 저장 버튼으로 확정</span></div></div>
 }
 
-function MonetizationView({ integrationsState, toggleIntegration, notify }) {
-  return <div className="subpage"><div className="subpage-heading"><div><span className="intro-kicker"><Icon name="chart" size={14} /> REVENUE LAYER</span><h2>수익화 연결</h2><p>채널별 정책을 지키면서 링크와 캠페인을 포스트에 안전하게 연결합니다.</p></div><button className="ghost-button" onClick={() => notify('수익 리포트는 채널 연결 후 집계됩니다.')}><Icon name="chart" size={16} /> 리포트 내보내기</button></div><div className="metric-grid"><Metric label="이번 달 예상 수익" value="—" delta="채널 연결 후 집계" /><Metric label="클릭 → 구매 전환" value="—" delta="추적 설정 필요" /><Metric label="연결된 채널" value={`${Object.values(integrationsState).filter(Boolean).length} / 5`} delta="검토 후 활성화" /></div><div className="monetization-layout"><section className="card connector-card"><div className="section-heading"><div><h3>연결 가능한 채널</h3><p>자격과 계정 상태를 확인한 뒤 직접 연결하세요.</p></div><span className="security-label"><Icon name="shield" size={14} /> 자격 증명은 로컬에 저장하지 않음</span></div><div className="connector-grid">{integrations.map((item) => <ConnectorCard key={item.id} item={item} connected={integrationsState[item.id]} onToggle={() => toggleIntegration(item.id)} />)}</div></section><section className="card affiliate-builder"><div className="section-heading"><div><h3>제휴 링크 넣기</h3><p>원문 링크를 붙이면 표준 고지문과 함께 초안에 배치합니다.</p></div><Icon name="link" size={20} /></div><label>상품 또는 캠페인 링크<input placeholder="https://smartstore.naver.com/..." /></label><div className="builder-row"><label>채널<select><option>네이버 쇼핑 커넥트</option><option>쿠팡 파트너스</option><option>직접 협찬</option></select></label><button className="primary-button" onClick={() => notify('링크를 초안의 관련 문단에 연결했어요.')}>초안에 연결 <Icon name="arrow" size={15} /></button></div><div className="builder-note"><Icon name="shield" size={15} /><span>링크가 있는 글에는 경제적 이해관계 표시가 필요합니다. 게시 전 문구와 위치를 다시 확인하세요.</span></div></section></div></div>
+function MonetizationView({ integrationsState, toggleIntegration, notify, affiliateUrl, setAffiliateUrl, affiliateChannel, setAffiliateChannel, onAttachLink }) {
+  const selectedCount = Object.values(integrationsState).filter(Boolean).length
+  return <div className="subpage"><div className="subpage-heading"><div><span className="intro-kicker"><Icon name="chart" size={14} /> REVENUE LAYER</span><h2>수익화 채널 선택</h2><p>외부 계정은 연결하지 않고, 이 초안에 사용할 채널과 고지문을 관리합니다.</p></div><button className="ghost-button" onClick={() => notify('실제 수익 리포트는 각 채널 계정 연결 후 제공됩니다.')}><Icon name="chart" size={16} /> 리포트 안내</button></div><div className="metric-grid"><Metric label="이번 달 예상 수익" value="—" delta="외부 계정 연결 필요" /><Metric label="클릭 → 구매 전환" value="—" delta="추적 설정 필요" /><Metric label="이 초안의 채널" value={`${selectedCount} / 5`} delta="선택된 채널 수" /></div><div className="monetization-layout"><section className="card connector-card"><div className="section-heading"><div><h3>초안에 사용할 채널</h3><p>버튼은 계정 연결이 아니라 이 초안에 채널을 선택하는 기능입니다.</p></div><span className="security-label"><Icon name="shield" size={14} /> 실제 계정·자격 증명은 연결하지 않음</span></div><div className="connector-grid">{integrations.map((item) => <ConnectorCard key={item.id} item={item} selected={integrationsState[item.id]} onToggle={() => toggleIntegration(item.id)} />)}</div></section><section className="card affiliate-builder"><div className="section-heading"><div><h3>제휴 링크 넣기</h3><p>입력한 원문 링크를 본문에 실제로 삽입하고 고지문을 함께 추가합니다.</p></div><Icon name="link" size={20} /></div><label>상품 또는 캠페인 링크<input value={affiliateUrl} onChange={(event) => setAffiliateUrl(event.target.value)} placeholder="https://smartstore.naver.com/..." /></label><div className="builder-row"><label>채널<select value={affiliateChannel} onChange={(event) => setAffiliateChannel(event.target.value)}>{affiliateChannels.map((channel) => <option value={channel.value} key={channel.value}>{channel.label}</option>)}</select></label><button className="primary-button" onClick={onAttachLink}>본문에 삽입 <Icon name="arrow" size={15} /></button></div><div className="builder-note"><Icon name="shield" size={15} /><span>링크를 삽입하면 중복 여부와 http(s) 주소를 확인하고 경제적 이해관계 고지문을 함께 추가합니다. 이후 저장 버튼을 눌러야 포스트에 확정됩니다.</span></div></section></div></div>
 }
 
 function Metric({ label, value, delta }) {
   return <div className="metric-card"><span>{label}</span><strong>{value}</strong><small><span className="metric-arrow">↗</span> {delta}</small></div>
 }
 
-function ConnectorCard({ item, connected, onToggle }) {
-  return <div className="connector-item"><div className={`integration-logo large ${item.color}`}>{item.short}</div><div className="connector-copy"><strong>{item.label}</strong><span>{item.detail}</span><small>{connected ? '계정이 연결되어 있습니다.' : item.id === 'adsense' ? '소유 사이트에만 사용 가능' : '자격 확인 후 활성화'}</small></div><button className={connected ? 'connected-button' : 'connect-button'} onClick={onToggle}>{connected ? <><Icon name="check" size={14} /> 연결됨</> : '설정하기'}</button></div>
+function ConnectorCard({ item, selected, onToggle }) {
+  return <div className="connector-item"><div className={`integration-logo large ${item.color}`}>{item.short}</div><div className="connector-copy"><strong>{item.label}</strong><span>{item.detail}</span><small>{selected ? '이 초안에 선택됨 · 외부 계정은 연결되지 않음' : item.id === 'adsense' ? '소유 사이트와 AdSense 계정이 별도로 필요' : '계정 연결 없이 초안 메타데이터만 준비'}</small></div><button className={selected ? 'connected-button' : 'connect-button'} onClick={onToggle}>{selected ? <><Icon name="check" size={14} /> 초안에 선택됨</> : '초안에 선택'}</button></div>
 }
 
 function PolicyView({ disclosure, setDisclosure, notify }) {

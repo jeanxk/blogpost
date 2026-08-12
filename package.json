@@ -8,6 +8,7 @@
     "operate": "./start_blogpost.command",
     "build": "vite build",
     "lint": "oxlint",
+    "test:monetization": "node --test scripts/monetization.test.mjs",
     "smoke": "node scripts/smoke.mjs",
     "preview": "vite preview"
   },
