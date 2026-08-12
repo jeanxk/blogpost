@@ -1,0 +1,11 @@
+[project]
+name = "blogpost"
+version = "0.1.0"
+description = "블로그포스트: human-reviewed monetization blog drafting service"
+requires-python = ">=3.10"
+dependencies = ["openai-agents"]
+
+[tool.blogpost]
+manager = "Sol 5.6 Orchestrator"
+default_model = "gpt-5.6-sol"
+publishing_mode = "human_review_required"
